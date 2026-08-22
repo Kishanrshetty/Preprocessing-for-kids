@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Garbage In, Diagnosis Out — an audit you can click</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,800&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#FAF8F3;
+  --paper-2:#F3EFE6;
+  --ink:#101822;
+  --ink-2:#1B2634;
+  --ink-3:#2B3948;
+  --muted:#5D6A78;
+  --rule:#E3DDD0;
+  --blue:#2563A8;
+  --blue-soft:#E7F0FA;
+  --red:#D8382A;
+  --red-soft:#FCEDEB;
+  --teal:#0E8A7D;
+  --teal-soft:#E2F3F0;
+  --amber:#D9931E;
+  --amber-soft:#FBF1DE;
+  --plum:#6A4CB5;
+  --plum-soft:#EFEAFA;
+  --display:'Fraunces',Georgia,'Times New Roman',serif;
+  --body:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'JetBrains Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  --shadow:0 1px 2px rgba(16,24,34,.05),0 10px 30px -14px rgba(16,24,34,.22);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font-family:var(--body);font-size:17px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+p{margin:0 0 1.05em}
+b,strong{font-weight:600}
+em{font-style:italic}
+
+/* ---------- brand rule ---------- */
+.rainbow{height:7px;background:linear-gradient(90deg,#E23B2E,#E98A21,#EFC02A,#3FA84C,#2E7FC4,#5B4BB8,#B0439B);position:sticky;top:0;z-index:60}
+
+/* ---------- masthead + stop rail ---------- */
+.masthead{
+  position:sticky;top:7px;z-index:50;background:rgba(250,248,243,.92);
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--rule);
+}
+.masthead-in{max-width:1120px;margin:0 auto;padding:11px 26px;display:flex;align-items:center;gap:26px}
+.wordmark{font-family:var(--display);font-weight:800;font-size:20px;letter-spacing:-.02em;text-decoration:none;flex:none}
+.wordmark span:nth-child(1){color:#E23B2E}.wordmark span:nth-child(2){color:#E98A21}
+.wordmark span:nth-child(3){color:#3FA84C}.wordmark span:nth-child(4){color:#2E7FC4}
+.wordmark span:nth-child(5){color:#5B4BB8}.wordmark span:nth-child(6){color:#B0439B}
+.rail{display:flex;gap:4px;flex:1;list-style:none;margin:0;padding:0;overflow-x:auto;scrollbar-width:none}
+.rail::-webkit-scrollbar{display:none}
+.rail button{
+  font:600 11.5px/1 var(--body);letter-spacing:.04em;text-transform:uppercase;
+  background:none;border:0;color:var(--muted);padding:8px 9px;border-radius:999px;
+  cursor:pointer;white-space:nowrap;transition:.18s;
+}
+.rail button:hover:not(:disabled){color:var(--ink);background:var(--paper-2)}
+.rail button:disabled{opacity:.32;cursor:default}
+.rail button[aria-current="true"]{background:var(--ink);color:#fff}
+.rail .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--teal);margin-right:6px;vertical-align:middle;opacity:0}
+.rail button.done .dot{opacity:1}
+.restart{font:500 12px var(--body);color:var(--muted);background:none;border:1px solid var(--rule);padding:7px 12px;border-radius:999px;cursor:pointer;flex:none}
+.restart:hover{color:var(--red);border-color:var(--red)}
+
+/* ---------- layout ---------- */
+.wrap{max-width:820px;margin:0 auto;padding:0 26px}
+.wrap-wide{max-width:1120px;margin:0 auto;padding:0 26px}
+.band{padding:76px 0}
+.band-ink{background:var(--ink);color:#DDE4EC}
+.band-ink h2,.band-ink h3{color:#fff}
+.stop{display:none}
+.stop.is-active{display:block;animation:enter .55s cubic-bezier(.16,.84,.44,1) both}
+@keyframes enter{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+
+/* ---------- type ---------- */
+h1{font-family:var(--display);font-weight:800;font-size:clamp(42px,7.2vw,78px);line-height:.98;letter-spacing:-.028em;margin:0 0 22px}
+h2{font-family:var(--display);font-weight:700;font-size:clamp(28px,4vw,40px);line-height:1.1;letter-spacing:-.02em;margin:0 0 18px}
+h3{font-family:var(--display);font-weight:700;font-size:22px;line-height:1.25;margin:0 0 10px}
+.kicker{font:700 11.5px/1 var(--body);letter-spacing:.2em;text-transform:uppercase;color:var(--muted);margin:0 0 16px;display:flex;align-items:center;gap:10px}
+.kicker::after{content:"";height:1px;background:var(--rule);flex:1}
+.band-ink .kicker{color:#7C8DA0}
+.band-ink .kicker::after{background:#2B3948}
+.lede{font-size:20px;line-height:1.55;color:var(--ink-3)}
+.stop-no{font:700 11.5px/1 var(--body);letter-spacing:.2em;color:var(--red)}
+.big-quote{font-family:var(--display);font-weight:600;font-size:clamp(21px,3vw,27px);line-height:1.32;letter-spacing:-.01em;margin:34px 0;color:var(--ink)}
+.band-ink .big-quote{color:#fff}
+.center{text-align:center}
+
+/* ---------- callouts ---------- */
+.note{border-left:4px solid var(--rule);background:var(--paper-2);padding:20px 24px;border-radius:0 10px 10px 0;margin:26px 0;font-size:16px}
+.note h4{font:700 11.5px/1 var(--body);letter-spacing:.16em;text-transform:uppercase;margin:0 0 10px}
+.note p:last-child{margin-bottom:0}
+.note-teal{border-color:var(--teal);background:var(--teal-soft)}.note-teal h4{color:var(--teal)}
+.note-red{border-color:var(--red);background:var(--red-soft)}.note-red h4{color:var(--red)}
+.note-amber{border-color:var(--amber);background:var(--amber-soft)}.note-amber h4{color:#9C6A0F}
+.note-plum{border-color:var(--plum);background:var(--plum-soft)}.note-plum h4{color:var(--plum)}
+.note-blue{border-color:var(--blue);background:var(--blue-soft)}.note-blue h4{color:var(--blue)}
+.dashed{border:2px dashed var(--teal);border-left-width:2px;background:transparent;border-radius:10px;padding:22px 24px}
+.dashed h4{color:var(--teal)}
+.band-ink .note{background:var(--ink-2);border-color:var(--ink-3);color:#C9D3DE}
+.band-ink .note h4{color:#8FA2B5}
+
+/* ---------- buttons ---------- */
+.btn{
+  font:600 15px var(--body);letter-spacing:.01em;border:0;border-radius:999px;
+  padding:14px 26px;cursor:pointer;transition:.16s;display:inline-flex;align-items:center;gap:10px;
+}
+.btn-primary{background:var(--ink);color:#fff}
+.btn-primary:hover{background:var(--ink-3);transform:translateY(-1px)}
+.btn-red{background:var(--red);color:#fff;box-shadow:0 6px 18px -8px rgba(216,56,42,.9)}
+.btn-red:hover{filter:brightness(1.07);transform:translateY(-1px)}
+.btn-teal{background:var(--teal);color:#fff;box-shadow:0 6px 18px -8px rgba(14,138,125,.9)}
+.btn-teal:hover{filter:brightness(1.07);transform:translateY(-1px)}
+.btn-ghost{background:transparent;color:var(--ink);border:1.5px solid var(--rule)}
+.btn-ghost:hover{border-color:var(--ink)}
+.band-ink .btn-ghost{color:#DDE4EC;border-color:#33465A}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.btn:focus-visible,.rail button:focus-visible,.cell-btn:focus-visible,.restart:focus-visible{outline:3px solid var(--plum);outline-offset:3px}
+.next-wrap{margin-top:52px;padding-top:30px;border-top:1px solid var(--rule);display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.band-ink .next-wrap{border-color:var(--ink-3)}
+.next-hint{font-size:14px;color:var(--muted)}
+.band-ink .next-hint{color:#7C8DA0}
+
+/* ---------- THE TRACK — signature element ---------- */
+.track{position:relative;height:284px;margin:30px 0 14px;user-select:none}
+.track-axis{position:absolute;left:0;right:0;bottom:62px;height:2px;background:var(--rule)}
+.band-ink .track-axis{background:#33465A}
+.tick{position:absolute;bottom:38px;transform:translateX(-50%);font:400 11px var(--mono);color:var(--muted)}
+.tick::before{content:"";position:absolute;left:50%;top:-9px;width:1px;height:6px;background:var(--rule)}
+.band-ink .tick{color:#7C8DA0}.band-ink .tick::before{background:#33465A}
+.track-label{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font:700 10.5px var(--body);letter-spacing:.18em;color:var(--muted)}
+.band-ink .track-label{color:#7C8DA0}
+
+.person{position:absolute;bottom:64px;transform:translateX(-50%);text-align:center;
+  transition:left 1.05s cubic-bezier(.65,0,.35,1),opacity .4s;width:92px;z-index:5}
+.person-lift .person-name{margin-bottom:var(--lift,0px)}
+.person svg{width:30px;height:46px;overflow:visible}
+.person .stick-body{stroke:currentColor;stroke-width:2.4;stroke-linecap:round;fill:none}
+.person .stick-head{fill:currentColor}
+.person-name{font:700 11px var(--mono);letter-spacing:.02em;margin-bottom:4px;white-space:nowrap}
+.person-blue{color:var(--blue)}
+.person-red{color:var(--red)}
+.person-grey{color:#A9B4BF}
+.person-ghost{opacity:.55}
+.person-ghost svg{stroke-dasharray:3 3}
+.bob{animation:bob 3.4s ease-in-out infinite}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+.verdict{
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:6px;
+  font:700 9.5px var(--body);letter-spacing:.1em;padding:4px 8px;border-radius:5px;white-space:nowrap;
+  transition:.35s;
+}
+.verdict-call{background:var(--red);color:#fff}
+.verdict-clear{background:var(--teal);color:#fff}
+.flip{animation:flip .55s ease both}
+@keyframes flip{0%{transform:translateX(-50%) rotateX(0)}50%{transform:translateX(-50%) rotateX(90deg) scale(.9)}100%{transform:translateX(-50%) rotateX(0)}}
+
+.vline{position:absolute;bottom:56px;top:6px;width:0;border-left:3px dashed var(--teal);
+  transform:translateX(-50%);transition:left 1.15s cubic-bezier(.65,0,.35,1);z-index:2}
+.vline-dirty{border-color:var(--red)}
+.vline .chip{
+  position:absolute;top:-4px;left:50%;transform:translateX(-50%);
+  font:700 10.5px var(--body);letter-spacing:.09em;color:#fff;background:var(--teal);
+  padding:5px 10px;border-radius:6px;white-space:nowrap
+}
+.vline-dirty .chip{background:var(--red)}
+.avg-mark{position:absolute;bottom:34px;transform:translateX(-50%);text-align:center;transition:left .9s cubic-bezier(.65,0,.35,1),opacity .5s}
+.avg-mark .pip{width:9px;height:9px;border-radius:50%;margin:0 auto 5px;background:currentColor}
+.avg-mark .txt{font:700 10.5px var(--body);letter-spacing:.07em;white-space:nowrap;position:relative;z-index:4;background:var(--paper);padding:2px 7px;border-radius:4px}
+.gap-shade{position:absolute;bottom:58px;height:150px;pointer-events:none;background:rgba(216,56,42,.09);
+  border-left:1px dashed rgba(216,56,42,.45);border-right:1px dashed rgba(14,138,125,.45);
+  transition:.9s;z-index:1}
+.span-bracket{position:absolute;height:1px;background:var(--muted);bottom:150px}
+.span-bracket span{position:absolute;left:50%;transform:translateX(-50%);top:-19px;font:italic 400 12px var(--body);color:var(--muted);background:var(--paper);padding:0 8px;white-space:nowrap}
+.caption{font:italic 400 15px/1.5 var(--body);color:var(--muted);text-align:center;max-width:600px;margin:6px auto 0}
+.band-ink .caption{color:#8FA2B5}
+.band-ink .gap-shade{background:rgba(216,56,42,.2)}
+
+/* ---------- slider playground ---------- */
+.play{background:#fff;border:1px solid var(--rule);border-radius:14px;padding:26px 28px 18px;box-shadow:var(--shadow);margin:28px 0}
+.play-row{display:flex;align-items:center;gap:18px;flex-wrap:wrap;margin-bottom:6px}
+.play-row label{font:700 11px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+input[type=range]{-webkit-appearance:none;appearance:none;flex:1;min-width:220px;height:4px;border-radius:99px;background:var(--rule);outline:none}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;background:var(--ink);cursor:grab;border:4px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.25)}
+input[type=range]::-moz-range-thumb{width:20px;height:20px;border-radius:50%;background:var(--ink);cursor:grab;border:4px solid #fff}
+.play-read{font:700 22px var(--mono);min-width:110px}
+.play-verdict{font:700 12px var(--body);letter-spacing:.1em;padding:7px 13px;border-radius:6px}
+
+/* ---------- THE MACHINE ---------- */
+.machine{background:var(--ink-2);border:1px solid var(--ink-3);border-radius:16px;overflow:hidden;box-shadow:0 30px 60px -30px rgba(0,0,0,.6)}
+.machine-head{display:flex;align-items:center;gap:12px;padding:14px 20px;background:#151F2B;border-bottom:1px solid var(--ink-3);
+  font:700 11px var(--mono);letter-spacing:.16em;color:#8FA2B5}
+.lamp{width:9px;height:9px;border-radius:50%;background:#4B5C6E;flex:none;transition:.3s}
+.lamp.on{background:var(--amber);box-shadow:0 0 12px var(--amber);animation:pulse 1s infinite}
+.lamp.done{background:var(--teal);box-shadow:0 0 12px var(--teal);animation:none}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+.machine-status{margin-left:auto;color:#5D7288}
+.machine-body{padding:24px 22px}
+.hopper{display:flex;flex-wrap:wrap;gap:6px;min-height:74px;padding:12px;border:1px dashed var(--ink-3);border-radius:10px;align-content:flex-start}
+.hopper:empty{min-height:46px;align-items:center;justify-content:center}
+.hopper:empty::after{content:'every record read';font:400 11px var(--mono);letter-spacing:.1em;color:#3E4E5F}
+.hopper-label{font:700 10px var(--mono);letter-spacing:.16em;color:#5D7288;margin:0 0 8px}
+.chip{font:400 11.5px var(--mono);background:#22303F;color:#B9C6D3;padding:5px 9px;border-radius:6px;border:1px solid #2F3F50;white-space:nowrap;transition:.25s}
+.chip.reading{background:var(--amber);color:#191919;border-color:var(--amber);transform:scale(1.12);box-shadow:0 0 20px rgba(217,147,30,.5)}
+.chip.landed{animation:land .4s ease both}
+@keyframes land{0%{transform:scale(1.3);opacity:0}60%{transform:scale(.96)}100%{transform:scale(1);opacity:1}}
+.chip-h{background:rgba(37,99,168,.2);border-color:rgba(37,99,168,.6);color:#9EC4EA}
+.chip-d{background:rgba(216,56,42,.2);border-color:rgba(216,56,42,.6);color:#F0A79E}
+.chip-x{background:#232D38;border-color:#3A4757;color:#77869A;text-decoration:line-through}
+.bins{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:16px}
+.bin{background:#151F2B;border:1px solid var(--ink-3);border-radius:10px;padding:13px}
+.bin h4{font:700 9.5px var(--mono);letter-spacing:.12em;margin:0 0 10px;color:#7C8DA0}
+.bin-h h4{color:#6FA5DC}.bin-d h4{color:#E88C80}
+.bin-chips{display:flex;flex-wrap:wrap;gap:5px;min-height:30px;margin-bottom:10px}
+.bin-sum{font:400 12.5px var(--mono);color:#8FA2B5;border-top:1px dashed var(--ink-3);padding-top:9px;min-height:38px}
+.bin-sum b{color:#fff;font-weight:700;font-size:15px}
+.readout{margin-top:18px;border-top:1px solid var(--ink-3);padding-top:18px}
+.readout-title{font:700 10px var(--mono);letter-spacing:.16em;color:#5D7288;margin-bottom:14px}
+.belief{display:flex;align-items:baseline;gap:14px;padding:11px 0;border-bottom:1px dashed var(--ink-3);opacity:.16;transform:translateY(6px);transition:.5s}
+.belief.show{opacity:1;transform:none}
+.belief:last-child{border-bottom:0}
+.belief .b-text{color:#B9C6D3;font-size:15.5px;flex:1}
+.belief .b-val{font:700 27px var(--mono);color:#fff;letter-spacing:-.02em}
+.belief .b-unit{font:400 12px var(--mono);color:#5D7288;margin-left:-8px}
+.belief-line .b-val{color:var(--teal)}
+.belief-alarm .b-val{color:var(--red)}
+.alarm-note{background:rgba(216,56,42,.13);border:1px solid rgba(216,56,42,.4);border-radius:9px;padding:14px 16px;margin-top:16px;color:#F3B4AC;font-size:15px;opacity:0;transition:.5s}
+.alarm-note.show{opacity:1}
+.alarm-note b{color:#fff}
+.machine-foot{padding:18px 22px;background:#151F2B;border-top:1px solid var(--ink-3);display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.machine-foot .hint{font:400 13.5px var(--body);color:#5D7288}
+
+/* ---------- data table ---------- */
+.table-wrap{overflow-x:auto;margin:26px 0;border-radius:12px;box-shadow:var(--shadow)}
+table.records{width:100%;border-collapse:collapse;background:#fff;font-size:15.5px;min-width:560px}
+table.records th{background:var(--ink-2);color:#fff;font:700 10.5px var(--body);letter-spacing:.14em;text-transform:uppercase;padding:15px 16px;text-align:left}
+table.records th.th-label{background:var(--amber)}
+table.records td{padding:0;border-bottom:1px solid var(--paper-2)}
+table.records tbody tr:nth-child(even){background:var(--paper-2)}
+table.records tbody tr.row-out{animation:rowOut .75s ease forwards}
+@keyframes rowOut{0%{opacity:1}35%{background:var(--red-soft)}100%{opacity:0;transform:translateX(30px)}}
+table.records tbody tr.row-fixed{animation:rowFix 1.1s ease}
+@keyframes rowFix{0%,100%{background:transparent}30%{background:var(--teal-soft)}}
+.cell{display:block;padding:14px 16px;font-family:var(--mono);font-size:14.5px}
+.cell-id{font-weight:700}
+.cell-label{font-family:var(--body);font-weight:700;font-size:14px}
+.lbl-h{color:var(--blue)}.lbl-d{color:var(--red)}
+.cell-btn{
+  width:100%;text-align:left;background:none;border:0;font:inherit;color:inherit;cursor:pointer;
+  position:relative;transition:.15s;border-radius:6px;
+}
+.cell-btn:hover{background:var(--plum-soft);box-shadow:inset 0 0 0 2px var(--plum)}
+.cell-btn.checked{background:transparent;box-shadow:inset 0 0 0 1px var(--rule);color:var(--muted)}
+.cell-btn.flagged{background:var(--amber-soft);box-shadow:inset 0 0 0 2px var(--amber);animation:waiting 2.2s ease-in-out infinite}
+@keyframes waiting{0%,100%{box-shadow:inset 0 0 0 2px var(--amber)}50%{box-shadow:inset 0 0 0 2px var(--amber),0 0 0 5px rgba(217,147,30,.22)}}
+.cell-btn.resolved{background:var(--teal-soft);box-shadow:inset 0 0 0 2px var(--teal)}
+.cell-btn.shake{animation:shake .4s}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+.cell-mark{position:absolute;right:10px;top:50%;transform:translateY(-50%);font:700 11px var(--body)}
+.value-swap{animation:swap .8s ease}
+@keyframes swap{0%{transform:translateY(0);opacity:1}45%{transform:translateY(-10px);opacity:0}55%{transform:translateY(10px);opacity:0}100%{transform:translateY(0);opacity:1}}
+
+/* ---------- audit layout ---------- */
+.audit-grid{display:grid;grid-template-columns:1fr 380px;gap:26px;align-items:start}
+.audit-grid>*{min-width:0}
+.audit-panel{position:sticky;top:88px;background:#fff;border:1px solid var(--rule);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+.panel-head{padding:16px 20px;border-bottom:1px solid var(--rule);display:flex;align-items:center;gap:10px}
+.panel-head h4{font:700 11px var(--body);letter-spacing:.16em;text-transform:uppercase;margin:0;color:var(--muted)}
+.progress-pips{display:flex;gap:5px;margin-left:auto}
+.pip-sm{width:9px;height:9px;border-radius:50%;background:var(--rule);transition:.3s}
+.pip-sm.on{background:var(--teal);transform:scale(1.15)}
+.panel-body{padding:20px;max-height:calc(100vh - 190px);overflow-y:auto}
+.panel-empty{color:var(--muted);font-size:15px}
+.finding-title{font-family:var(--display);font-weight:700;font-size:20px;margin:0 0 4px}
+.finding-tag{font:700 10px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--amber);margin-bottom:10px}
+.finding-body{font-size:15px;line-height:1.55;color:var(--ink-3)}
+.verdict-q{font:700 11px var(--body);letter-spacing:.13em;text-transform:uppercase;color:var(--muted);margin:18px 0 10px}
+.verdict-btns{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.vbtn{font:700 13px var(--body);padding:11px 8px;border-radius:9px;border:1.5px solid var(--rule);background:#fff;cursor:pointer;transition:.15s;text-align:center}
+.vbtn small{display:block;font-weight:400;font-size:11px;color:var(--muted);margin-top:2px}
+.vbtn:hover{border-color:var(--ink);transform:translateY(-1px)}
+.vbtn.wrong{border-color:var(--red);background:var(--red-soft);opacity:.55;cursor:default;transform:none}
+.vbtn.right{border-color:var(--teal);background:var(--teal-soft)}
+.vfeedback{margin-top:14px;padding:13px 15px;border-radius:9px;font-size:14.5px;line-height:1.5}
+.vfeedback.no{background:var(--red-soft);border-left:3px solid var(--red)}
+.vfeedback.yes{background:var(--teal-soft);border-left:3px solid var(--teal)}
+.vfeedback h5{font:700 10.5px var(--body);letter-spacing:.13em;text-transform:uppercase;margin:0 0 6px}
+.vfeedback.no h5{color:var(--red)}.vfeedback.yes h5{color:var(--teal)}
+.notes-list{list-style:none;margin:14px 0 0;padding:0;border-top:1px dashed var(--rule)}
+.notes-list li{display:flex;gap:10px;align-items:baseline;padding:9px 0;border-bottom:1px dashed var(--rule);font-size:13.5px}
+.notes-list .n-id{font:700 12px var(--mono)}
+.notes-list .n-act{margin-left:auto;font:700 9.5px var(--body);letter-spacing:.1em;padding:3px 7px;border-radius:4px}
+.act-DROP{background:var(--red-soft);color:var(--red)}
+.act-FIX{background:var(--blue-soft);color:var(--blue)}
+.act-KEEP{background:var(--teal-soft);color:var(--teal)}
+.resume{margin-top:14px}
+.resume-btn{width:100%;display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;
+  background:var(--amber-soft);border:1.5px solid var(--amber);border-radius:10px;padding:11px 14px;
+  font:600 13.5px var(--body);color:#8A5E0C;margin-bottom:8px}
+.resume-btn:hover{background:#F7E7C8}
+.resume-btn b{margin-left:auto;font:700 11px var(--body);letter-spacing:.1em;text-transform:uppercase;color:var(--amber)}
+.toast{margin-top:16px;padding:14px 16px;border-radius:10px;background:var(--teal);color:#fff;font-size:15px;animation:enter .4s both}
+.toast b{font-weight:700}
+
+/* ---------- misc ---------- */
+.reveal-btn{font:600 13px var(--body);background:var(--plum-soft);color:var(--plum);border:0;padding:10px 16px;border-radius:999px;cursor:pointer;margin-top:6px}
+.reveal-btn:hover{background:var(--plum);color:#fff}
+.reveal-body{display:none;margin-top:14px;padding:16px 18px;background:var(--paper-2);border-radius:10px;font-size:15.5px;line-height:1.6}
+.reveal-body.open{display:block;animation:enter .4s both}
+.q-card{background:#fff;border:1px solid var(--rule);border-left:4px solid var(--plum);border-radius:0 12px 12px 0;padding:22px 24px;margin:18px 0;box-shadow:var(--shadow)}
+.q-card h4{font:700 10.5px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--plum);margin:0 0 10px}
+.picker{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:18px 0}
+.pick{background:#fff;border:1.5px solid var(--rule);border-radius:12px;padding:16px 10px;cursor:pointer;text-align:center;transition:.15s;font-family:var(--body)}
+.pick:hover{border-color:var(--ink)}
+.pick.sel{border-color:var(--plum);background:var(--plum-soft);box-shadow:0 0 0 3px rgba(106,76,181,.14)}
+.pick .p-name{font-weight:700;font-size:15px;display:block}
+.pick .p-read{font:400 12.5px var(--mono);color:var(--muted)}
+.pick.correct{border-color:var(--teal);background:var(--teal-soft)}
+.pick.missed{border-color:var(--amber);background:var(--amber-soft)}
+.compare{width:100%;border-collapse:collapse;margin:24px 0;font-size:15.5px;background:#fff;border-radius:12px;overflow:hidden;box-shadow:var(--shadow)}
+.compare th{background:var(--ink-2);color:#fff;font:700 10.5px var(--body);letter-spacing:.14em;text-transform:uppercase;padding:14px 16px;text-align:left}
+.compare th.th-b{background:var(--amber)}
+.compare td{padding:13px 16px;border-bottom:1px solid var(--paper-2)}
+.compare tr:nth-child(even){background:var(--paper-2)}
+.v-call{color:var(--red);font-weight:700;font-size:13px;letter-spacing:.04em}
+.v-clear{color:var(--muted);font-size:14px}
+.toggle-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:22px 0 6px}
+.seg{display:inline-flex;background:var(--paper-2);border-radius:999px;padding:4px}
+.seg button{font:600 13.5px var(--body);border:0;background:none;padding:10px 20px;border-radius:999px;cursor:pointer;color:var(--muted);transition:.18s}
+.seg button.on{background:var(--ink);color:#fff}
+.seg button.on.dirty{background:var(--red)}
+.seg button.on.clean{background:var(--teal)}
+.footer{padding:60px 0 80px;text-align:center;color:var(--muted);font-size:13px;letter-spacing:.16em;font-weight:700}
+.footer .stars{color:var(--plum);letter-spacing:.6em;margin-bottom:16px;font-size:15px}
+.count-badge{display:inline-block;font:700 11px var(--body);letter-spacing:.1em;padding:5px 11px;border-radius:999px;background:var(--amber-soft);color:#9C6A0F}
+
+@media (max-width:880px){
+  .audit-grid{grid-template-columns:1fr}
+  .audit-panel{position:static}
+  .bins{grid-template-columns:1fr}
+  .picker{grid-template-columns:1fr 1fr}
+  .band{padding:52px 0}
+  body{font-size:16px}
+  .track{height:272px}
+  table.records{min-width:430px;font-size:14px}
+  .cell{padding:12px 11px;font-size:13.5px}
+  table.records th{padding:13px 11px;letter-spacing:.1em}
+  .panel-body{max-height:none;overflow:visible}
+  .verdict{font-size:9px;padding:3px 6px}
+  .masthead-in{padding:10px 16px;gap:14px}
+  .wrap,.wrap-wide{padding:0 18px}
+}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+<div class="rainbow"></div>
+
+<header class="masthead">
+  <div class="masthead-in">
+    <a class="wordmark" href="#top"><span>k</span><span>i</span><span>d</span><span>z</span><span>d</span><span>o</span></a>
+    <ul class="rail" id="rail"></ul>
+    <button class="restart" id="restart">Start over</button>
+  </div>
+</header>
+
+<main id="top">
+
+<!-- ============ STOP 0 — HERO ============ -->
+<section class="stop is-active" id="stop-0">
+  <div class="band">
+    <div class="wrap">
+      <p class="kicker">Artificial intelligence · Data cleaning · Worksheet 1</p>
+      <h1>Garbage&nbsp;In,<br><span style="color:var(--red)">Diagnosis&nbsp;Out</span></h1>
+      <p class="lede">A hospital taught a machine to decide which patients needed calling back for an urgent blood test. The code was correct. The arithmetic was correct. The machine was confident. It was also frightening perfectly healthy people.</p>
+      <p class="lede" style="margin-top:-4px">Nobody had made a programming mistake. In the next twenty minutes you will find out what did go wrong — by auditing the twelve records the machine learned from, repairing them, and watching a real diagnosis change.</p>
+    </div>
+    <div class="wrap-wide">
+      <div class="track" id="hero-track"></div>
+      <p class="caption">Four patients, waiting for an answer. The dashed line is the machine's cut-off: stand to the right of it and you get called back for testing. Watch what happens to Ayesha and Daniel when somebody cleans the data.</p>
+    </div>
+    <div class="wrap">
+      <div class="next-wrap">
+        <button class="btn btn-red" data-goto="1">Begin the audit</button>
+        <span class="next-hint">Eight stops. Nothing to calculate — the machine does the arithmetic, you make the judgements.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STOP 1 — THE CALLBACKS ============ -->
+<section class="stop" id="stop-1">
+  <div class="band">
+    <div class="wrap">
+      <p class="kicker"><span class="stop-no">Stop 1</span> The callbacks</p>
+      <h2>A machine that was very confident</h2>
+      <p>At Meridian General Hospital, a screening model reads one number from a patient's yearly check-up — their fasting blood sugar — and decides one thing: should this person be called back for a full diabetes test, yes or no?</p>
+      <p>For the first month it ran quietly in the background. Then the nurses noticed something. The model was calling back far more people than anyone expected, and almost every one of them came back clear.</p>
+      <p>Each of those callbacks is a real person. A letter arriving that says the hospital would like to see you again. A week of worrying. A morning taken off school or work. A needle in your arm. For nothing.</p>
+      <div style="margin:34px 0">
+        <div id="letters"></div>
+      </div>
+      <p>The hospital brought in an auditor to find the bug in the code.</p>
+      <p><strong>There was no bug in the code.</strong></p>
+      <div class="note note-teal">
+        <p style="font-family:var(--display);font-size:19px;font-weight:600;color:var(--teal);margin:0">The machine was not broken. It learned exactly what it was shown. It was shown something wrong.</p>
+      </div>
+      <div class="note note-red">
+        <h4>Your job</h4>
+        <p>You are the auditor. The hospital has handed you the twelve patient records the model learned from. Somewhere in that small table is the reason healthy people are being frightened. Find it, repair it, and prove what difference it makes.</p>
+      </div>
+      <div class="next-wrap">
+        <button class="btn btn-primary" data-goto="2">First, how does the machine decide?</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STOP 2 — THE LINE ============ -->
+<section class="stop" id="stop-2">
+  <div class="band">
+    <div class="wrap">
+      <p class="kicker"><span class="stop-no">Stop 2</span> The line</p>
+      <h2>How the model draws its line</h2>
+      <p>Before you can find the fault, you need to know exactly what the model does with the data. It is simpler than you might expect.</p>
+      <p>The model is handed past patients, each with a blood sugar reading and a label saying whether that person turned out to be healthy or diabetic. It then does three things, and only three things.</p>
+      <div class="note note-blue">
+        <h4>The whole algorithm</h4>
+        <p style="margin-bottom:6px"><strong>One.</strong> Work out the average blood sugar of everyone labelled Healthy.</p>
+        <p style="margin-bottom:6px"><strong>Two.</strong> Work out the average blood sugar of everyone labelled Diabetic.</p>
+        <p style="margin-bottom:12px"><strong>Three.</strong> Draw the line exactly halfway between those two averages.</p>
+        <p>After that, any new patient above the line gets called back for a test. Anyone below the line does not.</p>
+      </div>
+    </div>
+    <div class="wrap-wide">
+      <div class="track" id="explain-track"></div>
+    </div>
+    <div class="wrap">
+      <div style="text-align:center;margin-bottom:26px">
+        <button class="btn btn-teal" id="btn-explain">Watch it draw the line</button>
+      </div>
+      <p class="caption" id="explain-caption">Six past patients. Three healthy, three diabetic. Press the button and follow what the model does.</p>
+
+      <div class="play" id="play" hidden>
+        <p style="font:700 11px var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 4px">Try a new patient</p>
+        <p style="font-size:15px;color:var(--ink-3)">Drag the slider. The model does not think about this person at all — it only asks which side of the line they are standing on.</p>
+        <div class="play-row">
+          <label for="slider">Reading</label>
+          <input type="range" id="slider" min="60" max="220" value="145" step="1">
+          <span class="play-read" id="play-read">145 <span style="font-size:12px;color:var(--muted)">mg/dL</span></span>
+          <span class="play-verdict" id="play-verdict"></span>
+        </div>
+      </div>
+
+      <div class="note note-plum">
+        <h4>This is a real algorithm</h4>
+        <p>Computer scientists call this a <strong>nearest centroid classifier</strong>. "Centroid" is only a grand word for the average position of a group. The model is asking one question about every new patient: which group's average is this person closer to? Simple as it looks, versions of it are used in real medical and biological research today.</p>
+      </div>
+      <p class="big-quote">The line is not written by a human. It is calculated from the data. Change one number in the table and the line moves — and people standing on the wrong side of it are given a different answer about their own health.</p>
+      <div class="next-wrap">
+        <button class="btn btn-primary" data-goto="3">Now train it on the real records</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STOP 3 — FIRST TRAINING ============ -->
+<section class="stop" id="stop-3">
+  <div class="band band-ink">
+    <div class="wrap">
+      <p class="kicker"><span class="stop-no" style="color:#F0A79E">Stop 3</span> First training</p>
+      <h2>Feed it the records</h2>
+      <p style="color:#C9D3DE">These are the twelve records the hospital handed you, exactly as the model received them. Fasting blood sugar is measured in milligrams per decilitre, written mg/dL. For a healthy adult it usually sits somewhere between 70 and 99.</p>
+      <p style="color:#C9D3DE">Load them into the machine and watch it work out what it believes.</p>
+    </div>
+    <div class="wrap-wide">
+      <div class="machine" id="machine-a"></div>
+    </div>
+    <div class="wrap" id="after-train-a" hidden>
+      <div class="note note-red" style="margin-top:34px">
+        <h4>Look at that first number again</h4>
+        <p>The model believes the average healthy patient has a blood sugar of <strong>56</strong>. No such person exists. Somebody reading 56 would be on the floor, not filling in a form.</p>
+        <p>It was never comparing new patients against healthy people at all. It was comparing them against a phantom, assembled out of broken cells in the table.</p>
+      </div>
+    </div>
+    <div class="wrap-wide" id="phantom-wrap" hidden>
+      <div class="track" id="phantom-track"></div>
+      <p class="caption">Blue figures are the healthy patients who were recorded properly. The grey figure is the only "healthy person" this model has ever imagined — assembled out of a zero and a five that were never real readings. Everybody to the right of the red line gets a letter.</p>
+    </div>
+    <div class="wrap">
+      <div class="next-wrap" id="train-a-next" hidden>
+        <button class="btn btn-red" data-goto="4">Find out what broke it</button>
+        <span class="next-hint">Five cells in that table are worth stopping on. Four are faults. One is not.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STOP 4 — THE AUDIT ============ -->
+<section class="stop" id="stop-4">
+  <div class="band">
+    <div class="wrap">
+      <p class="kicker"><span class="stop-no">Stop 4</span> The audit</p>
+      <h2>Trust nothing</h2>
+      <p>Read every single cell. <strong>Click anything you would not be willing to bet a patient's health on.</strong> You have deliberately not been told what to look for — this is what a real audit feels like.</p>
+      <div class="note note-teal">
+        <h4>Before you start</h4>
+        <p>A number can be neatly typed, correctly spelled, sensibly formatted, sitting in the right column, and still be completely wrong. Nothing in this table is smudged or obviously broken. That is the point.</p>
+      </div>
+    </div>
+    <div class="wrap-wide">
+      <div class="audit-grid">
+        <div>
+          <div class="table-wrap"><table class="records" id="audit-table"></table></div>
+          <p style="font-size:14px;color:var(--muted);margin-top:-8px">Every cell is clickable. Wrong guesses cost you nothing — auditors check things that turn out to be fine all day long.</p>
+          <button class="reveal-btn" id="hint-btn">I'm stuck — give me a nudge</button>
+          <div class="reveal-body" id="hint-body">
+            <p style="margin:0"><strong>Four kinds of fault hide in tables like this one:</strong></p>
+            <p style="margin:8px 0 0">A number that no living body could produce. A number measured in the wrong units. The same person written down twice. A label the computer cannot read.</p>
+            <p style="margin:8px 0 0;color:var(--muted)">And one number that looks alarming but is telling the truth.</p>
+          </div>
+          <div class="note note-amber">
+            <h4>Fix, fill, or drop</h4>
+            <p><strong>Fix</strong> — you can recover the true value with certainty. Nothing is invented, nothing is lost.</p>
+            <p><strong>Fill</strong> — you cannot recover it, so you estimate it, usually with the average. Honest and common, but never forget what you have done: you have put a guess into a table of measurements, and from that moment on it looks exactly like evidence.</p>
+            <p style="margin-bottom:0"><strong>Drop</strong> — the value is gone, no honest estimate exists, or the row is a copy of another. You lose a patient from the study, which hurts. Keeping a lie hurts more.</p>
+          </div>
+        </div>
+        <aside class="audit-panel">
+          <div class="panel-head">
+            <h4>Field notes</h4>
+            <div class="progress-pips" id="pips"></div>
+          </div>
+          <div class="panel-body" id="panel-body">
+            <div id="panel-slot"></div>
+            <div id="notes-holder"></div>
+          </div>
+        </aside>
+      </div>
+    </div>
+    <div class="wrap">
+      <div id="audit-done" hidden>
+        <div class="note note-teal" style="margin-top:36px">
+          <h4>Audit complete</h4>
+          <p>Two numbers repaired, one label corrected, two rows removed — and one very strange reading left exactly where it was, because it was true.</p>
+        </div>
+        <p class="big-quote">An outlier only ever tells you that a value is unusual. It never tells you the value is wrong. Working out which one you are looking at is the whole job.</p>
+      </div>
+      <div class="next-wrap" id="audit-next" hidden>
+        <button class="btn btn-teal" data-goto="5">Train the machine again</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STOP 5 — SECOND TRAINING ============ -->
+<section class="stop" id="stop-5">
+  <div class="band band-ink">
+    <div class="wrap">
+      <p class="kicker"><span class="stop-no" style="color:#F0A79E">Stop 5</span> Second training</p>
+      <h2>The repaired records</h2>
+      <p style="color:#C9D3DE">The same study after your audit. Ten rows instead of twelve, two numbers repaired, one label corrected. Nothing has been invented and nothing true has been thrown away.</p>
+      <p style="color:#C9D3DE">Load them into exactly the same machine. Not one line of its code has changed.</p>
+    </div>
+    <div class="wrap-wide">
+      <div class="machine" id="machine-b"></div>
+    </div>
+    <div class="wrap" id="after-train-b" hidden>
+      <div class="note note-teal" style="margin-top:34px">
+        <h4>Same code, different beliefs</h4>
+        <p>The average healthy patient now reads 91 mg/dL — a number a real person could actually have — and the line has moved 19 points up the scale, from 113 to 132.</p>
+      </div>
+    </div>
+    <div class="wrap-wide" id="moved-wrap" hidden>
+      <div class="track" id="moved-track"></div>
+      <p class="caption">The dirty records dragged the line down to 113. Cleaning put it back at 132. Everybody standing in that shaded gap was told something different about their health depending on which model happened to be running.</p>
+    </div>
+    <div class="wrap">
+      <div class="next-wrap" id="train-b-next" hidden>
+        <button class="btn btn-teal" data-goto="6">Who was standing in the gap?</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STOP 6 — FOUR PATIENTS ============ -->
+<section class="stop" id="stop-6">
+  <div class="band">
+    <div class="wrap">
+      <p class="kicker"><span class="stop-no">Stop 6</span> Four patients</p>
+      <h2>Four people are waiting</h2>
+      <p>Four patients had their check-up this morning and are waiting to hear whether they need to come back. Here are their readings.</p>
+      <div class="q-card">
+        <h4>Predict first</h4>
+        <p style="margin-bottom:2px">Which of these four get a <strong>different answer</strong> from the dirty model than from the clean one? Choose as many as you think. Model A's line sits at <strong style="color:var(--red)">113</strong>, Model B's at <strong style="color:var(--teal)">132</strong>.</p>
+        <div class="picker" id="picker"></div>
+        <button class="btn btn-primary" id="check-pred">Check my prediction</button>
+        <div class="reveal-body" id="pred-result"></div>
+      </div>
+    </div>
+    <div class="wrap-wide" id="reveal-wrap" hidden>
+      <div class="toggle-row" style="justify-content:center">
+        <span style="font:700 11px var(--body);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)">Which model is running?</span>
+        <div class="seg" id="seg">
+          <button class="on dirty" data-model="A">Model A — dirty</button>
+          <button data-model="B">Model B — clean</button>
+        </div>
+      </div>
+      <div class="track" id="verdict-track"></div>
+      <p class="caption">Flip the switch. Nothing about these four people changes. Only the data the machine was shown.</p>
+    </div>
+    <div class="wrap" id="stop6-tail" hidden>
+      <table class="compare">
+        <thead><tr><th>Patient</th><th>Reading</th><th>Model A (dirty)</th><th class="th-b">Model B (clean)</th></tr></thead>
+        <tbody id="compare-body"></tbody>
+      </table>
+      <p><strong>Two people.</strong> Ayesha and Daniel were both told, by a confident machine, that they might have diabetes. Neither of them does. Nobody typed their names in wrongly. Nobody wrote a bad line of code. A zero that meant "no result", a five that meant "ninety", one patient counted twice and one patient not counted at all. That was enough.</p>
+      <p>Notice the direction of the harm, too, because it will not always run this way. Here the line fell, so healthy people were frightened. Had those same four faults pushed the line <em>upwards</em> instead, the very same model would have sent genuinely ill patients home and told them there was nothing to worry about.</p>
+      <div class="next-wrap">
+        <button class="btn btn-primary" data-goto="7">What did we learn?</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ STOP 7 — TAKEAWAYS ============ -->
+<section class="stop" id="stop-7">
+  <div class="band">
+    <div class="wrap">
+      <p class="kicker"><span class="stop-no">Stop 7</span> What did we learn</p>
+      <h2>Three questions</h2>
+      <p>There is no single right wording for any of these. Answer out loud, or in your notebook, then open the box and see whether an auditor would agree with you.</p>
+
+      <div class="q-card">
+        <h4>Question one</h4>
+        <p>P09's reading of 216 was far stranger than P04's reading of 5.0 — and yet one of them was kept and the other was repaired. How do you decide whether a surprising number is an error or the truth?</p>
+        <button class="reveal-btn" data-reveal="a1">Show one good answer</button>
+        <div class="reveal-body" id="a1">You check whether the number agrees with everything else you know about that person. P09 is labelled diabetic, and 216 is entirely possible for untreated diabetes — the number and the label tell the same story, so it stays. P04 is labelled healthy, and 5.0 is impossible for any living person in mg/dL — but perfectly ordinary in mmol/L, which is exactly what a partner laboratory would have used. The story only makes sense one way. Strangeness is a reason to investigate, never a reason to delete.</div>
+      </div>
+
+      <div class="q-card">
+        <h4>Question two</h4>
+        <p>P03's cell was never blank. It held an ordinary looking number, and that is exactly what made it dangerous. Why does missing data disguised as a real value do more damage than an empty cell would?</p>
+        <button class="reveal-btn" data-reveal="a2">Show one good answer</button>
+        <div class="reveal-body" id="a2">An empty cell announces itself. Every tool you own will stop, complain, or skip it, and a human will be asked what to do. A zero says nothing — it slides into the arithmetic like any other measurement and drags the average down with it, silently. The model never gets the chance to know that it is missing something, so nobody gets the chance to fix it.</div>
+      </div>
+
+      <div class="q-card">
+        <h4>Question three</h4>
+        <p>Here the dirty model raised false alarms — it frightened healthy people. Describe a way dirty data could cause the opposite failure, a model that misses genuinely ill patients. Then say which of the two a hospital should fear more, and defend it.</p>
+        <button class="reveal-btn" data-reveal="a3">Show one way to argue it</button>
+        <div class="reveal-body" id="a3">Flip the faults. If a healthy patient's reading had been recorded as 900 instead of 90, or a diabetic patient's 155 had been entered as 15, the healthy average would shoot up, the line would climb far above 132, and genuinely ill people would be told they are fine. Which is worse is a real argument with no settled answer: false alarms waste money, clinic time and cause real fear, and enough of them teach staff to ignore the model altogether. Missed cases cost years of somebody's health. Most screening programmes deliberately accept more false alarms to avoid missed cases — but that is a choice a hospital makes on purpose, not one a broken spreadsheet should make for it.</div>
+      </div>
+
+      <div class="note dashed" style="margin-top:44px">
+        <h4>Did you know?</h4>
+        <p>In 1999 NASA lost the Mars Climate Orbiter, a spacecraft that had travelled for nine months and cost around 125 million dollars. It did not crash because of a broken engine or a coding error. One team's software worked in imperial units of force while the receiving system expected metric ones. Nobody converted between them. The numbers looked perfectly reasonable to everybody involved, and the spacecraft flew far too close to Mars and was destroyed.</p>
+        <p style="margin-bottom:0">A unit that nobody wrote down is one of the most expensive mistakes in the history of space flight. P04's row is exactly the same mistake, in a hospital.</p>
+      </div>
+
+      <div class="note dashed">
+        <h4>And this really happens</h4>
+        <p>One of the most widely used diabetes datasets in the world, studied by machine learning students everywhere, contains patients whose recorded blood pressure is zero, whose skin thickness is zero, and whose body mass index is zero. None of those are possible in a living person. Every one of them is a missing measurement written down as a number, exactly like P03's row.</p>
+        <p style="margin-bottom:0">Students who train a model on that data without noticing get a working model, a confident model, and a wrong one. Students who check first do not. The only difference between them is whether somebody looked.</p>
+      </div>
+
+      <div class="note note-blue">
+        <h4>A note on real medicine</h4>
+        <p>Real clinics do not let a model invent its own cut-off. They use figures agreed by international medical bodies after decades of research. The model in this tour learns its line from its own data instead, which is precisely why that data has to be trustworthy. And if you ever have a question about your own health, the person to ask is a doctor, never a spreadsheet.</p>
+      </div>
+
+      <p class="big-quote center" style="margin:52px auto;max-width:660px">A model can only ever be as good as the data it was shown. Cleaning is not tidying up before the real work begins. It <em>is</em> the real work.</p>
+
+      <div class="next-wrap" style="justify-content:center;border:0">
+        <button class="btn btn-ghost" id="again">Run the whole audit again</button>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <div class="stars">✦ ✦ ✦ ✦ ✦</div>
+    Data cleaning · Worksheet 1 · Garbage in, diagnosis out
+  </div>
+</section>
+
+</main>
+
+<style>
+  [hidden]{display:none!important}
+  .crowd{display:flex;justify-content:center;gap:30px;flex-wrap:wrap;padding:34px 0 10px}
+  .crowd .unit{position:relative;color:var(--blue);text-align:center;transition:color .6s}
+  .crowd .unit.hit{color:var(--red)}
+  .crowd .unit svg.fig{width:32px;height:50px;overflow:visible}
+  .crowd .unit .stick-body{stroke:currentColor;stroke-width:2.4;stroke-linecap:round;fill:none}
+  .crowd .unit .stick-head{fill:currentColor}
+  .crowd .env{position:absolute;left:50%;top:-30px;width:26px;opacity:0;color:var(--red)}
+  .crowd .unit.hit .env{animation:envIn .7s cubic-bezier(.2,.9,.3,1) forwards}
+  @keyframes envIn{
+    0%{opacity:0;transform:translate(-260px,-46px) rotate(-24deg) scale(.5)}
+    100%{opacity:1;transform:translate(-50%,0) rotate(0) scale(1)}
+  }
+  .crowd-caption{text-align:center;font:italic 400 15px var(--body);color:var(--muted);margin-top:6px}
+  .offscale{position:absolute;left:0;bottom:132px;font:700 10.5px var(--body);letter-spacing:.06em;color:var(--red);max-width:190px;line-height:1.45}
+  .band-ink .offscale{color:#F0A79E}
+</style>
+
+<script>
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s)};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s))};
+var REDUCE=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function wait(ms){return new Promise(function(r){setTimeout(r,REDUCE?0:ms)})}
+
+/* ---------------- data ---------------- */
+var DIRTY=[
+ {id:'P01',age:47,bs:92,label:'Healthy'},
+ {id:'P02',age:52,bs:88,label:'Healthy'},
+ {id:'P03',age:39,bs:0,label:'Healthy'},
+ {id:'P04',age:61,bs:5,shown:'5.0',label:'Healthy'},
+ {id:'P05',age:44,bs:95,label:'Healthy'},
+ {id:'P06',age:58,bs:90,label:'H'},
+ {id:'P07',age:55,bs:162,label:'Diabetic'},
+ {id:'P08',age:63,bs:168,label:'Diabetic'},
+ {id:'P09',age:49,bs:216,label:'Diabetic'},
+ {id:'P10',age:57,bs:164,label:'Diabetic'},
+ {id:'P11',age:66,bs:155,label:'Diabetic'},
+ {id:'P12',age:66,bs:155,label:'Diabetic'}
+];
+function clone(a){return a.map(function(r){return Object.assign({},r)})}
+var auditRows=clone(DIRTY);
+var WAITING=[{name:'Grace',v:94,lift:0},{name:'Ayesha',v:118,lift:84},{name:'Daniel',v:128,lift:42},{name:'Omar',v:158,lift:0}];
+var MODEL_A={H:56,D:170,line:113}, MODEL_B={H:91,D:173,line:132};
+
+/* ---------------- track primitives ---------------- */
+var MIN=30,MAX=235;
+function pct(v){return ((v-MIN)/(MAX-MIN))*100}
+function stick(cls){return '<svg viewBox="0 0 24 42" class="'+(cls||'')+'" aria-hidden="true">'+
+ '<circle class="stick-head" cx="12" cy="7" r="5.6"/>'+
+ '<path class="stick-body" d="M12 13 V27 M12 17.5 L4.5 24 M12 17.5 L19.5 24 M12 27 L5.5 40 M12 27 L18.5 40"/></svg>'}
+function shell(el,opts){
+  opts=opts||{}; el.innerHTML='';
+  var ax=document.createElement('div'); ax.className='track-axis'; el.appendChild(ax);
+  (opts.ticks||[60,100,140,180,220]).forEach(function(t){
+    var d=document.createElement('div'); d.className='tick'; d.style.left=pct(t)+'%'; d.textContent=t; el.appendChild(d);
+  });
+  var l=document.createElement('div'); l.className='track-label'; l.textContent=opts.label||'BLOOD SUGAR (mg/dL)'; el.appendChild(l);
+}
+function addPerson(el,o){
+  var p=document.createElement('div');
+  p.className='person person-'+(o.tone||'blue')+(o.ghost?' person-ghost':'');
+  p.style.left=pct(o.v)+'%';
+  if(o.lift){p.classList.add('person-lift');p.style.setProperty('--lift',o.lift+'px')}
+  p.innerHTML='<div class="verdict" hidden></div><div class="person-name">'+o.name+'</div>'+
+              '<div class="'+(o.bob===false?'':'bob')+'" style="animation-delay:'+(Math.random()*2).toFixed(2)+'s">'+stick()+'</div>';
+  el.appendChild(p);
+  return p;
+}
+function setVerdict(p,call,animate){
+  var v=p.querySelector('.verdict');
+  v.hidden=false;
+  v.className='verdict '+(call?'verdict-call':'verdict-clear')+(animate?' flip':'');
+  v.textContent=call?'CALL BACK':'NO TEST NEEDED';
+  if(animate){setTimeout(function(){v.classList.remove('flip')},600)}
+}
+function addLine(el,o){
+  var d=document.createElement('div');
+  d.className='vline '+(o.dirty?'vline-dirty':'');
+  d.style.left=pct(o.v)+'%';
+  d.innerHTML='<div class="chip">'+o.label+'</div>';
+  if(o.shift)d.querySelector('.chip').style.transform='translateX('+o.shift+')';
+  el.appendChild(d); return d;
+}
+function addAvg(el,o){
+  var d=document.createElement('div');
+  d.className='avg-mark'; d.style.left=pct(o.v)+'%'; d.style.color=o.color; d.style.opacity=o.hidden?0:1;
+  d.innerHTML='<div class="pip"></div><div class="txt">'+o.label+'</div>';
+  el.appendChild(d); return d;
+}
+function addGap(el,a,b){
+  var d=document.createElement('div'); d.className='gap-shade';
+  d.style.left=pct(a)+'%'; d.style.width=(pct(b)-pct(a))+'%';
+  el.appendChild(d); return d;
+}
+function animNum(el,to,dur){
+  if(REDUCE){el.textContent=to;return}
+  var t0=performance.now(); dur=dur||750;
+  function step(now){
+    var p=Math.min(1,(now-t0)/dur), e=1-Math.pow(1-p,3);
+    el.textContent=Math.round(to*e);
+    if(p<1)requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ---------------- navigation ---------------- */
+var STOPS=['Start','Callbacks','The line','Training 1','The audit','Training 2','Four patients','Takeaways'];
+var current=0, unlocked=0;
+var rail=$('#rail');
+STOPS.forEach(function(name,i){
+  var li=document.createElement('li');
+  var b=document.createElement('button');
+  b.innerHTML='<span class="dot"></span>'+name;
+  b.disabled=i>unlocked;
+  b.addEventListener('click',function(){go(i)});
+  li.appendChild(b); rail.appendChild(li);
+});
+function paintRail(){
+  $$('#rail button').forEach(function(b,i){
+    b.disabled=i>unlocked;
+    b.setAttribute('aria-current',i===current?'true':'false');
+    b.classList.toggle('done',i<current||(i<=unlocked&&i!==current));
+  });
+}
+function go(n){
+  if(n>unlocked)return;
+  var prev=$('#stop-'+current); if(prev)prev.classList.remove('is-active');
+  current=n;
+  var el=$('#stop-'+n); el.classList.add('is-active');
+  paintRail();
+  window.scrollTo({top:0,behavior:REDUCE?'auto':'smooth'});
+  if(ENTER[n])ENTER[n]();
+}
+function unlock(n){ if(n>unlocked){unlocked=n; paintRail();} }
+document.addEventListener('click',function(e){
+  var t=e.target.closest('[data-goto]'); if(!t)return;
+  var n=parseInt(t.getAttribute('data-goto'),10);
+  unlock(n); go(n);
+});
+$('#restart').addEventListener('click',function(){location.reload()});
+$('#again').addEventListener('click',function(){location.reload()});
+$$('[data-reveal]').forEach(function(b){
+  b.addEventListener('click',function(){
+    var box=$('#'+b.getAttribute('data-reveal'));
+    box.classList.toggle('open');
+    b.textContent=box.classList.contains('open')?'Hide':b.getAttribute('data-label')||'Show one good answer';
+  });
+});
+$('#hint-btn').addEventListener('click',function(){
+  var b=$('#hint-body'); b.classList.toggle('open');
+  this.textContent=b.classList.contains('open')?'Hide the nudge':"I'm stuck — give me a nudge";
+});
+
+/* ---------------- stop 0 : hero ---------------- */
+var heroPeople={}, heroLine;
+(function heroBuild(){
+  var el=$('#hero-track'); shell(el);
+  WAITING.forEach(function(w){
+    var p=addPerson(el,{v:w.v,name:w.name+' '+w.v,tone:w.v>=155?'red':'blue',lift:w.lift});
+    heroPeople[w.name]=p;
+    setVerdict(p,w.v>MODEL_A.line,false);
+  });
+  heroLine=addLine(el,{v:MODEL_A.line,label:'DIRTY DATA · LINE 113',dirty:true});
+  loopHero();
+})();
+function heroState(model){
+  var dirty=model==='A', L=dirty?MODEL_A.line:MODEL_B.line;
+  heroLine.style.left=pct(L)+'%';
+  heroLine.className='vline '+(dirty?'vline-dirty':'');
+  heroLine.querySelector('.chip').textContent=(dirty?'DIRTY DATA · LINE 113':'CLEANED DATA · LINE 132');
+  WAITING.forEach(function(w){
+    var was=heroPeople[w.name].querySelector('.verdict').classList.contains('verdict-call');
+    var now=w.v>L;
+    setVerdict(heroPeople[w.name],now,was!==now);
+  });
+}
+function loopHero(){
+  var m='A';
+  setTimeout(function tick(){
+    if(!$('#stop-0').classList.contains('is-active'))return setTimeout(tick,3000);
+    m=(m==='A')?'B':'A';
+    heroState(m);
+    setTimeout(tick,REDUCE?100000:4600);
+  },1800);
+}
+
+/* ---------------- stop 1 : the crowd ---------------- */
+function buildCrowd(){
+  var el=$('#letters'); if(el.dataset.built)return; el.dataset.built='1';
+  var wrap=document.createElement('div'); wrap.className='crowd';
+  var envelope='<svg class="env" viewBox="0 0 30 20" aria-hidden="true"><rect x="1" y="1" width="28" height="18" rx="2" fill="#fff" stroke="currentColor" stroke-width="2"/><path d="M2 3 L15 12 L28 3" fill="none" stroke="currentColor" stroke-width="2"/></svg>';
+  var hits=[0,1,3,4,6,7];
+  for(var i=0;i<8;i++){
+    var u=document.createElement('div');
+    u.className='unit'+(hits.indexOf(i)>-1?' hit':'');
+    u.style.animationDelay=(i*0.12)+'s';
+    u.innerHTML=(hits.indexOf(i)>-1?envelope:'')+'<span class="fig-holder">'+stick('fig')+'</span>';
+    var env=u.querySelector('.env'); if(env)env.style.animationDelay=(0.25+i*0.16)+'s';
+    wrap.appendChild(u);
+  }
+  var cap=document.createElement('p'); cap.className='crowd-caption';
+  cap.textContent='Six of these eight letters should never have been sent.';
+  el.appendChild(wrap); el.appendChild(cap);
+}
+
+/* ---------------- stop 2 : how the line is drawn ---------------- */
+var TEACH=[{v:85,t:'blue'},{v:92,t:'blue'},{v:93,t:'blue'},{v:165,t:'red'},{v:170,t:'red'},{v:175,t:'red'}];
+var teachBuilt=false, playPerson=null;
+function buildTeach(){
+  if(teachBuilt)return; teachBuilt=true;
+  var el=$('#explain-track'); shell(el);
+  TEACH.forEach(function(p,i){ addPerson(el,{v:p.v,name:'',tone:p.t}); });
+}
+$('#btn-explain').addEventListener('click',function(){ runTeach(this) });
+async function runTeach(btn){
+  btn.disabled=true;
+  var el=$('#explain-track'), cap=$('#explain-caption');
+  cap.textContent='Step one: the average of everyone labelled Healthy.';
+  var a=addAvg(el,{v:90,color:'var(--blue)',label:'AVERAGE 90'}); a.style.opacity=0;
+  await wait(60); a.style.opacity=1; await wait(1400);
+  cap.textContent='Step two: the average of everyone labelled Diabetic.';
+  var b=addAvg(el,{v:170,color:'var(--red)',label:'AVERAGE 170'}); b.style.opacity=0;
+  await wait(60); b.style.opacity=1; await wait(1400);
+  cap.textContent='Step three: the line goes exactly halfway between them.';
+  var s1=document.createElement('div'); s1.className='span-bracket';
+  s1.style.left=pct(90)+'%'; s1.style.width=(pct(130)-pct(90))+'%';
+  s1.innerHTML='<span>same distance</span>';
+  var s2=document.createElement('div'); s2.className='span-bracket';
+  s2.style.left=pct(130)+'%'; s2.style.width=(pct(170)-pct(130))+'%';
+  s2.innerHTML='<span>same distance</span>';
+  el.appendChild(s1); el.appendChild(s2);
+  await wait(500);
+  var ln=addLine(el,{v:90,label:'THE LINE'});
+  await wait(80); ln.style.left=pct(130)+'%';
+  await wait(1150);
+  ln.querySelector('.chip').textContent='THE LINE 130';
+  cap.innerHTML='<strong>Nobody chose 130. The data chose it.</strong> Move a patient, change a label, and this line moves with it.';
+  $('#play').hidden=false;
+  playPerson=addPerson(el,{v:145,name:'NEW PATIENT',tone:'grey',bob:false});
+  playPerson.style.zIndex=6;
+  updatePlay();
+  btn.textContent='Line drawn';
+}
+function updatePlay(){
+  var v=parseInt($('#slider').value,10);
+  $('#play-read').innerHTML=v+' <span style="font-size:12px;color:var(--muted)">mg/dL</span>';
+  var call=v>130, vd=$('#play-verdict');
+  vd.textContent=call?'CALL BACK FOR TESTING':'NO TEST NEEDED';
+  vd.style.background=call?'var(--red)':'var(--teal-soft)';
+  vd.style.color=call?'#fff':'var(--teal)';
+  if(playPerson){
+    playPerson.style.left=pct(v)+'%';
+    playPerson.style.transition='left .12s linear';
+    playPerson.className='person person-'+(call?'red':'blue');
+    playPerson.querySelector('.person-name').textContent=v+' mg/dL';
+    setVerdict(playPerson,call,false);
+  }
+}
+$('#slider').addEventListener('input',updatePlay);
+
+/* ---------------- the machine ---------------- */
+function buildMachine(root,rows,opts){
+  root.innerHTML=
+   '<div class="machine-head"><span class="lamp"></span> MERIDIAN SCREENING MODEL <span class="machine-status">IDLE — '+rows.length+' records loaded</span></div>'+
+   '<div class="machine-body">'+
+     '<p class="hopper-label">THE RECORDS</p>'+
+     '<div class="hopper"></div>'+
+     '<div class="bins">'+
+       '<div class="bin bin-h"><h4>LABELLED EXACTLY "HEALTHY"</h4><div class="bin-chips"></div><div class="bin-sum">waiting</div></div>'+
+       '<div class="bin bin-d"><h4>LABELLED EXACTLY "DIABETIC"</h4><div class="bin-chips"></div><div class="bin-sum">waiting</div></div>'+
+       '<div class="bin bin-x"><h4>LABEL NOT RECOGNISED</h4><div class="bin-chips"></div><div class="bin-sum">waiting</div></div>'+
+     '</div>'+
+     '<div class="readout">'+
+       '<div class="readout-title">WHAT THE MACHINE NOW BELIEVES</div>'+
+       '<div class="belief" data-k="h"><span class="b-text">An average healthy patient reads</span><span class="b-val">—</span><span class="b-unit">mg/dL</span></div>'+
+       '<div class="belief" data-k="d"><span class="b-text">An average diabetic patient reads</span><span class="b-val">—</span><span class="b-unit">mg/dL</span></div>'+
+       '<div class="belief belief-line" data-k="l"><span class="b-text">So I will call back anybody above</span><span class="b-val">—</span><span class="b-unit">mg/dL</span></div>'+
+       '<div class="alarm-note"></div>'+
+     '</div>'+
+   '</div>'+
+   '<div class="machine-foot"><button class="btn '+(opts.tone||'btn-red')+'">'+opts.cta+'</button><span class="hint">'+opts.hint+'</span></div>';
+
+  var hopper=root.querySelector('.hopper');
+  rows.forEach(function(r){
+    var c=document.createElement('span'); c.className='chip'; c.dataset.id=r.id;
+    c.textContent=r.id+' · '+(r.shown||r.bs)+' · '+(r.label==='Healthy'||r.label==='Diabetic'?r.label:'"'+r.label+'"');
+    hopper.appendChild(c);
+  });
+
+  var btn=root.querySelector('.machine-foot .btn');
+  btn.addEventListener('click',function(){run(btn)});
+
+  async function run(btn){
+    btn.disabled=true; btn.textContent='Training…';
+    var lamp=root.querySelector('.lamp'), status=root.querySelector('.machine-status');
+    lamp.classList.add('on'); status.textContent='READING RECORDS ONE AT A TIME…';
+    var bins={h:root.querySelector('.bin-h'),d:root.querySelector('.bin-d'),x:root.querySelector('.bin-x')};
+    var terms={h:[],d:[],x:[]};
+    Object.keys(bins).forEach(function(k){bins[k].querySelector('.bin-sum').textContent='—'});
+
+    for(var i=0;i<rows.length;i++){
+      var r=rows[i];
+      var chip=hopper.querySelector('[data-id="'+r.id+'"]');
+      chip.classList.add('reading');
+      await wait(230);
+      var k=r.label==='Healthy'?'h':(r.label==='Diabetic'?'d':'x');
+      chip.classList.remove('reading');
+      chip.classList.add('chip-'+k,'landed');
+      bins[k].querySelector('.bin-chips').appendChild(chip);
+      if(k==='x'){
+        bins.x.querySelector('.bin-sum').innerHTML='I cannot match the text <b>"'+r.label+'"</b> to either group, so this patient is left out of both averages.';
+      }else{
+        terms[k].push(r.bs);
+        bins[k].querySelector('.bin-sum').textContent=terms[k].join(' + ');
+      }
+      await wait(90);
+    }
+
+    status.textContent='WORKING OUT THE TWO AVERAGES…';
+    await wait(650);
+    var res={};
+    ['h','d'].forEach(function(k){
+      var sum=terms[k].reduce(function(a,b){return a+b},0), n=terms[k].length, avg=sum/n;
+      res[k]=avg;
+      bins[k].querySelector('.bin-sum').innerHTML=terms[k].join(' + ')+'<br>= '+sum+' ÷ '+n+' = <b>'+avg+'</b>';
+    });
+    if(terms.x.length===0 && !bins.x.querySelector('.chip')){
+      bins.x.querySelector('.bin-sum').textContent='Nothing here. Every label was readable.';
+    }
+    var line=(res.h+res.d)/2;
+
+    await wait(700);
+    status.textContent='PLACING THE DECISION LINE…';
+    var bs=root.querySelectorAll('.belief');
+    var vals=[res.h,res.d,line];
+    for(var j=0;j<3;j++){
+      bs[j].classList.add('show');
+      animNum(bs[j].querySelector('.b-val'),vals[j]);
+      await wait(820);
+    }
+    if(res.h<70){
+      bs[0].classList.add('belief-alarm');
+      var al=root.querySelector('.alarm-note');
+      al.innerHTML='<b>'+res.h+' mg/dL.</b> That is what this model now believes an ordinary healthy adult looks like. Nobody on Earth walks into a check-up reading '+res.h+'.';
+      bs[2].querySelector('.b-val').style.color='var(--amber)';
+      await wait(300); al.classList.add('show');
+    }
+    lamp.classList.remove('on'); lamp.classList.add('done');
+    status.textContent='TRAINED — line at '+line+' mg/dL';
+    btn.textContent='Trained';
+    await wait(400);
+    if(opts.onDone)opts.onDone({H:res.h,D:res.d,line:line});
+  }
+}
+
+/* ---------------- stop 3 : model A ---------------- */
+var machineABuilt=false;
+function initMachineA(){
+  if(machineABuilt)return; machineABuilt=true;
+  buildMachine($('#machine-a'),DIRTY,{
+    cta:'Train the model',
+    tone:'btn-red',
+    hint:'Twelve records in. The machine does every calculation itself.',
+    onDone:function(res){
+      MODEL_A=res;
+      $('#after-train-a').hidden=false;
+      $('#phantom-wrap').hidden=false;
+      drawPhantom();
+      $('#train-a-next').hidden=false;
+    }
+  });
+}
+function drawPhantom(){
+  var el=$('#phantom-track'); shell(el);
+  [88,92,95].forEach(function(v){ addPerson(el,{v:v,name:'',tone:'blue'}) });
+  [155,162,164,168,216].forEach(function(v){ addPerson(el,{v:v,name:'',tone:'red'}) });
+  var ph=addPerson(el,{v:MODEL_A.H,name:'"AVERAGE HEALTHY" 56',tone:'grey',ghost:true,bob:false,lift:52});
+  ph.style.zIndex=6;
+  addLine(el,{v:MODEL_A.line,label:'MODEL A · LINE '+MODEL_A.line,dirty:true});
+}
+
+/* ---------------- stop 4 : the audit ---------------- */
+var FINDINGS={
+ impossible:{
+  cells:['P03:bs'], row:'P03', tag:'Fault · impossible value', title:'A reading no living body could produce',
+  body:'No living person has a blood sugar of zero. A reading anywhere near it would be a medical emergency, not a quiet line in a routine check-up. So this is not a measurement at all. It is the recording system\u2019s way of saying <em>no result was entered</em>, dropped into a column meant for real numbers. It is missing data wearing a costume, and the average cannot tell the difference.',
+  right:'DROP',
+  reply:{
+   FIX:'Fixing means recovering the true value with certainty. There is nothing here to recover — you would be inventing a number, not restoring one.',
+   FILL:'This is the trap. Filling it with the healthy average invents a patient who fits the pattern perfectly, then counts that invented patient as evidence for the pattern. Professionals do fill missing values, carefully. But with twelve rows, one guess can tilt the whole answer — and afterwards nothing in the table shows which numbers were measured and which were imagined.',
+   KEEP:'Keep it and the machine averages in a person who read zero. This single cell is most of the reason the healthy average collapsed to 56.'
+  },
+  done:'P03 dropped, and written down in the notes. You lose a patient from the study, which hurts. Keeping a lie hurts more.',
+  drop:'P03'
+ },
+ units:{
+  cells:['P04:bs'], row:'P04', tag:'Fault · unit mix-up', title:'A number measured in another language',
+  body:'Blood sugar is not measured the same way everywhere on Earth. Many countries report it in mg/dL, where a normal reading is about 90. Others report the very same patient in mmol/L, where that identical blood sample reads about 5.0. P04\u2019s sample was processed by a partner laboratory that uses mmol/L, and the number was copied straight into a mg/dL column without being converted. The patient is perfectly fine. The number is a lie.',
+  right:'FIX',
+  reply:{
+   FILL:'You do not need a guess. The true reading can be recovered exactly — this is not missing data, it is data in the wrong units.',
+   DROP:'You would be throwing away a perfectly good patient. Nothing is wrong with the measurement, only with the units it was written in.',
+   KEEP:'Keep it and the machine believes a living adult read 5. Together with P03\u2019s zero, that is what builds the phantom.'
+  },
+  done:'P04 repaired: 5.0 mmol/L × 18 = 90 mg/dL. Nothing invented. Nothing lost.',
+  set:{id:'P04',field:'bs',value:90,shown:null}
+ },
+ label:{
+  cells:['P06:label'], row:'P06', tag:'Fault · inconsistent label', title:'Six missing letters',
+  body:'You know instantly that H means Healthy. The model does not. It cannot read; it can only match text exactly, character for character. "H" does not match "Healthy", so it files this patient under a third group it has never heard of and leaves them out of both averages. A patient has been silently deleted from the study by six missing letters.',
+  right:'FIX',
+  reply:{
+   FILL:'Nothing is missing. The information is right there — it simply is not written in a form the machine can match.',
+   DROP:'Never. This is a real patient with a real reading of 90. Dropping them throws away good evidence because somebody typed a shortcut.',
+   KEEP:'Keep it and P06 stays invisible: counted in neither average, quietly absent from a study they are actually part of.'
+  },
+  done:'P06 relabelled Healthy. The patient rejoins the study — and pulls the healthy average back towards reality.',
+  set:{id:'P06',field:'label',value:'Healthy'}
+ },
+ duplicate:{
+  cells:['P11:id','P12:id'], row:'P12', tag:'Fault · duplicate record', title:'One patient, counted twice',
+  body:'Same age. Same reading. Two different patient numbers. This is one person registered twice — which happens constantly in real hospitals whenever somebody is admitted through a different desk or spells their name differently on a second visit. To the model, this patient now votes twice, and pulls the average towards themselves twice as hard as anybody else.',
+  right:'DROP',
+  reply:{
+   KEEP:'Then one person\u2019s blood test counts double. Nothing about them is wrong — there are simply two of them, and an average cannot tell.',
+   FIX:'There is nothing broken to repair. Both rows are accurate. The problem is that there are two of them.',
+   FILL:'Nothing is missing from either row.'
+  },
+  done:'P12 removed. The study now has one row per person, which is what it always claimed to have.',
+  drop:'P12'
+ },
+ outlier:{
+  cells:['P09:bs'], row:'P09', tag:'Not a fault · true outlier', title:'Strange, but true',
+  body:'216 is far higher than anybody else\u2019s reading, and it is tempting to circle it and throw it out for being weird. Do not. A reading of 216 is entirely possible for someone with untreated diabetes, and P09 is labelled diabetic — so the number and the label agree with each other. This is a <strong>true outlier</strong>: unusual, but real.',
+  right:'KEEP',
+  reply:{
+   DROP:'That is the mistake this whole audit is warning you about. Deleting it would mean deleting the truth for the crime of being inconvenient.',
+   FIX:'Fix what? There is nothing to correct. This reading is the truth about a genuinely unwell person.',
+   FILL:'Replacing a real measurement with an average would be inventing a more convenient patient.'
+  },
+  done:'P09 kept, exactly as recorded. Knowing when not to touch the data is the hardest part of the job.',
+  keep:true
+ }
+};
+var NUDGE={
+ 'P12:age':'Hold on. Before you rule this out — compare this row with the one directly above it.',
+ 'P12:bs':'155 is a perfectly ordinary reading for somebody with diabetes. But have you looked at the row above it?',
+ 'P11:age':'Nothing wrong with 66. Now glance at the row below.',
+ 'P11:bs':'The reading itself is fine. The row below is worth a second look.'
+};
+var OK_MSG={
+ 'P01:bs':'92 sits inside the normal 70–99 range and the label agrees with it. Nothing to see here — but checking was the right instinct.',
+ 'P02:bs':'88 is an ordinary healthy reading, labelled healthy. Consistent.',
+ 'P05:bs':'95 is high-ish for a healthy adult but entirely normal. The label agrees.',
+ 'P07:bs':'162 with a diabetic label. The number and the story match.',
+ 'P08:bs':'168 with a diabetic label. Consistent.',
+ 'P10:bs':'164 with a diabetic label. Consistent.'
+};
+var cellState={}, resolved={}, notes=[], auditReady=false;
+
+function cellBtn(key,inner,extra){
+  var st=cellState[key]||'';
+  var mark = st==='resolved' ? '<span class="cell-mark" style="color:var(--teal)">✓</span>'
+          : st==='flagged'  ? '<span class="cell-mark" style="color:var(--amber)">!</span>' : '';
+  return '<td><button class="cell-btn '+st+'" data-key="'+key+'"><span class="cell '+(extra||'')+'">'+inner+'</span>'+mark+'</button></td>';
+}
+function renderTable(){
+  var t=$('#audit-table');
+  t.innerHTML='<thead><tr><th>Patient</th><th>Age</th><th>Blood sugar (mg/dL)</th><th class="th-label">Label</th></tr></thead><tbody>'+
+   auditRows.map(function(r){
+     var lbl=(r.label==='Diabetic')?'lbl-d':'lbl-h';
+     return '<tr data-id="'+r.id+'">'+
+       cellBtn(r.id+':id',r.id,'cell-id')+
+       cellBtn(r.id+':age',r.age)+
+       cellBtn(r.id+':bs',(r.shown||r.bs))+
+       cellBtn(r.id+':label',r.label,'cell-label '+lbl)+
+     '</tr>';
+   }).join('')+'</tbody>';
+}
+function findingFor(key){
+  for(var k in FINDINGS){ if(FINDINGS[k].cells.indexOf(key)>-1) return k }
+  return null;
+}
+function notesHTML(){
+  if(!notes.length)return '';
+  return '<ul class="notes-list">'+notes.map(function(n){
+    return '<li><span class="n-id">'+n.id+'</span><span>'+n.what+'</span><span class="n-act act-'+n.act+'">'+n.act+'</span></li>';
+  }).join('')+'</ul>';
+}
+function paintPips(){
+  var n=Object.keys(resolved).length;
+  $('#pips').innerHTML=[0,1,2,3,4].map(function(i){return '<span class="pip-sm'+(i<n?' on':'')+'"></span>'}).join('');
+}
+function openFindings(){
+  return Object.keys(FINDINGS).filter(function(k){
+    return !resolved[k] && FINDINGS[k].cells.some(function(c){return cellState[c]==='flagged'});
+  });
+}
+function resumeHTML(){
+  var open=openFindings(); if(!open.length)return '';
+  return '<div class="resume">'+open.map(function(k){
+    return '<button class="resume-btn" data-resume="'+k+'"><span>'+FINDINGS[k].row+
+      ' \u00b7 flagged, no verdict yet</span><b>Resume</b></button>';
+  }).join('')+'</div>';
+}
+function renderNotes(){ $('#notes-holder').innerHTML=resumeHTML()+notesHTML() }
+function panel(html){ $('#panel-slot').innerHTML=html; renderNotes() }
+function panelIdle(){
+  var n=Object.keys(resolved).length;
+  panel(n===0
+   ? '<p class="panel-empty">Nothing flagged yet. Click any cell that looks wrong to you — or one you simply want to rule out.</p>'
+   : '<p class="panel-empty">'+n+' of 5 settled. Keep going: read every cell, including the ones that look boring.</p>');
+}
+function openFinding(k){
+  var f=FINDINGS[k];
+  var btns=['FIX','FILL','DROP','KEEP'];
+  var subs={FIX:'recover the true value',FILL:'estimate it',DROP:'delete the row',KEEP:'leave it alone'};
+  panel('<div class="finding-tag">'+f.tag+'</div>'+
+    '<h3 class="finding-title">'+f.title+'</h3>'+
+    '<div class="finding-body">'+f.body+'</div>'+
+    '<div class="verdict-q">What should an auditor do with it?</div>'+
+    '<div class="verdict-btns">'+btns.map(function(b){
+      return '<button class="vbtn" data-f="'+k+'" data-act="'+b+'">'+b+'<small>'+subs[b]+'</small></button>'}).join('')+
+    '</div><div class="vfeedback" hidden></div>');
+}
+$('#panel-body').addEventListener('click',function(e){
+  var r=e.target.closest('[data-resume]');
+  if(r){ openFinding(r.getAttribute('data-resume')); return; }
+  var b=e.target.closest('.vbtn'); if(!b||b.classList.contains('wrong')||b.classList.contains('right'))return;
+  var k=b.dataset.f, act=b.dataset.act, f=FINDINGS[k];
+  var fb=$('#panel-body .vfeedback'); fb.hidden=false;
+  if(act===f.right){
+    b.classList.add('right');
+    fb.className='vfeedback yes';
+    fb.innerHTML='<h5>'+(f.keep?'Correctly left alone':'Settled')+'</h5>'+f.done;
+    resolveFinding(k,act);
+  }else{
+    b.classList.add('wrong');
+    fb.className='vfeedback no';
+    fb.innerHTML='<h5>Not that one</h5>'+f.reply[act];
+  }
+});
+async function resolveFinding(k,act){
+  var f=FINDINGS[k];
+  resolved[k]=act;
+  f.cells.forEach(function(c){cellState[c]='resolved'});
+  notes.push({id:f.row,what:f.tag.split('· ')[1],act:act});
+  paintPips();
+  if(f.drop){
+    var tr=$('#audit-table tr[data-id="'+f.drop+'"]');
+    if(tr){tr.classList.add('row-out'); await wait(720)}
+    auditRows=auditRows.filter(function(r){return r.id!==f.drop});
+    renderTable();
+  }else if(f.set){
+    auditRows.forEach(function(r){ if(r.id===f.set.id){ r[f.set.field]=f.set.value; if(f.set.shown===null)r.shown=null; } });
+    renderTable();
+    var tr2=$('#audit-table tr[data-id="'+f.set.id+'"]'); if(tr2)tr2.classList.add('row-fixed');
+  }else{
+    renderTable();
+  }
+  renderNotes();
+  if(Object.keys(resolved).length===5)finishAudit();
+}
+function finishAudit(){
+  auditReady=true;
+  $('#audit-done').hidden=false;
+  $('#audit-next').hidden=false;
+  unlock(5);
+  var t=document.createElement('div'); t.className='toast';
+  t.innerHTML='<b>Audit complete.</b> Five cells settled, ten records standing. Now put them through the same machine.';
+  $('#notes-holder').appendChild(t);
+}
+var auditBuilt=false;
+function initAudit(){
+  if(auditBuilt)return; auditBuilt=true;
+  renderTable(); paintPips(); panelIdle();
+  $('#audit-table').addEventListener('click',function(e){
+    var b=e.target.closest('.cell-btn'); if(!b)return;
+    var key=b.dataset.key, k=findingFor(key);
+    if(k&&!resolved[k]){
+      FINDINGS[k].cells.forEach(function(c){ if(cellState[c]!=='resolved')cellState[c]='flagged' });
+      renderTable(); openFinding(k); return;
+    }
+    if(k&&resolved[k]){
+      panel('<div class="finding-tag">Already settled</div><h3 class="finding-title">'+FINDINGS[k].title+'</h3><div class="finding-body">'+FINDINGS[k].done+'</div>');
+      return;
+    }
+    if(cellState[key]!=='checked'){cellState[key]='checked'; renderTable()}
+    b=$('#audit-table [data-key="'+key+'"]');
+    if(NUDGE[key]){
+      panel('<div class="finding-tag" style="color:var(--plum)">Worth a second look</div><div class="finding-body">'+NUDGE[key]+'</div>');
+    }else{
+      if(b)b.classList.add('shake');
+      panel('<div class="finding-tag" style="color:var(--muted)">Checked and cleared</div><div class="finding-body">'+
+        (OK_MSG[key]||'Nothing wrong with this one. Auditors check things that turn out to be fine all day long — that is the job, not a waste of time.')+'</div>');
+    }
+  });
+}
+
+/* ---------------- stop 5 : model B ---------------- */
+var machineBBuilt=false;
+function initMachineB(){
+  if(machineBBuilt)return; machineBBuilt=true;
+  buildMachine($('#machine-b'),auditRows,{
+    cta:'Train it again',
+    tone:'btn-teal',
+    hint:'Same machine. Same three steps. Repaired records.',
+    onDone:function(res){
+      MODEL_B=res;
+      $('#after-train-b').hidden=false;
+      $('#moved-wrap').hidden=false;
+      drawMoved();
+      $('#train-b-next').hidden=false;
+    }
+  });
+}
+async function drawMoved(){
+  var el=$('#moved-track'); shell(el);
+  addGap(el,MODEL_A.line,MODEL_B.line);
+  WAITING.forEach(function(w){
+    addPerson(el,{v:w.v,name:w.name+' '+w.v,tone:w.v>=155?'red':'blue',lift:w.lift});
+  });
+  addLine(el,{v:MODEL_A.line,label:'DIRTY '+MODEL_A.line,dirty:true,shift:'-88%'});
+  var clean=addLine(el,{v:MODEL_A.line,label:'CLEAN '+MODEL_B.line,shift:'-12%'});
+  clean.style.opacity=0;
+  await wait(600);
+  clean.style.opacity=1;
+  clean.style.left=pct(MODEL_B.line)+'%';
+}
+
+/* ---------------- stop 6 : four patients ---------------- */
+var fourBuilt=false, picked={}, vPeople={}, vLine=null;
+function initFour(){
+  if(fourBuilt)return; fourBuilt=true;
+  $('#picker').innerHTML=WAITING.map(function(w){
+    return '<button class="pick" data-name="'+w.name+'"><span class="p-name">'+w.name+'</span><span class="p-read">'+w.v+' mg/dL</span></button>';
+  }).join('');
+  $('#picker').addEventListener('click',function(e){
+    var b=e.target.closest('.pick'); if(!b||b.dataset.locked)return;
+    var n=b.dataset.name; picked[n]=!picked[n]; b.classList.toggle('sel',picked[n]);
+  });
+}
+$('#check-pred').addEventListener('click',function(){
+  var correct=WAITING.filter(function(w){return w.v>MODEL_A.line&&w.v<=MODEL_B.line}).map(function(w){return w.name});
+  var chosen=Object.keys(picked).filter(function(k){return picked[k]});
+  $$('#picker .pick').forEach(function(b){
+    var n=b.dataset.name; b.dataset.locked='1'; b.classList.remove('sel');
+    if(correct.indexOf(n)>-1)b.classList.add(chosen.indexOf(n)>-1?'correct':'missed');
+  });
+  var perfect = chosen.length===correct.length && correct.every(function(n){return chosen.indexOf(n)>-1});
+  var box=$('#pred-result'); box.classList.add('open');
+  box.innerHTML=(perfect
+    ?'<strong>Exactly right.</strong> '
+    :'<strong>The two that change are Ayesha and Daniel.</strong> ')+
+    'Grace reads 94 — below both lines, so she is left alone either way. Omar reads 158 — above both lines, so he is called back either way. Ayesha (118) and Daniel (128) are the ones standing in the 19-point gap between the two lines. They are healthy. The dirty model calls them back anyway.';
+  $('#reveal-wrap').hidden=false;
+  $('#stop6-tail').hidden=false;
+  buildVerdictTrack();
+  buildCompare();
+  this.disabled=true; this.textContent='Checked';
+});
+function buildVerdictTrack(){
+  var el=$('#verdict-track'); shell(el);
+  addGap(el,MODEL_A.line,MODEL_B.line);
+  WAITING.forEach(function(w){
+    var p=addPerson(el,{v:w.v,name:w.name+' '+w.v,tone:w.v>=155?'red':'blue',lift:w.lift});
+    vPeople[w.name]=p; setVerdict(p,w.v>MODEL_A.line,false);
+  });
+  vLine=addLine(el,{v:MODEL_A.line,label:'MODEL A · LINE '+MODEL_A.line,dirty:true});
+}
+$('#seg').addEventListener('click',function(e){
+  var b=e.target.closest('button'); if(!b)return;
+  var m=b.dataset.model;
+  $$('#seg button').forEach(function(x){x.className=''});
+  b.className='on '+(m==='A'?'dirty':'clean');
+  var L=(m==='A')?MODEL_A.line:MODEL_B.line;
+  vLine.style.left=pct(L)+'%';
+  vLine.className='vline '+(m==='A'?'vline-dirty':'');
+  vLine.querySelector('.chip').textContent='MODEL '+m+' · LINE '+L;
+  WAITING.forEach(function(w){
+    var was=vPeople[w.name].querySelector('.verdict').classList.contains('verdict-call');
+    var now=w.v>L; setVerdict(vPeople[w.name],now,was!==now);
+  });
+});
+function buildCompare(){
+  $('#compare-body').innerHTML=WAITING.map(function(w){
+    var a=w.v>MODEL_A.line, b=w.v>MODEL_B.line;
+    function cell(x){return x?'<span class="v-call">CALL BACK FOR TESTING</span>':'<span class="v-clear">No test needed</span>'}
+    return '<tr><td><strong>'+w.name+'</strong></td><td style="font-family:var(--mono)">'+w.v+'</td><td>'+cell(a)+'</td><td>'+cell(b)+'</td></tr>';
+  }).join('');
+}
+
+/* ---------------- wire up ---------------- */
+var ENTER={1:buildCrowd,2:buildTeach,3:initMachineA,4:initAudit,5:initMachineB,6:initFour};
+paintRail();
+})();
+</script>
+</body>
+</html>
